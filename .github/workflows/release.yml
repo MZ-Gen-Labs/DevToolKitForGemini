@@ -1,0 +1,28 @@
+name: Release Chrome Extension
+
+# 「v」から始まるタグ（例: v1.0.0）がプッシュされた時だけ実行する
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # リリースを作成するための権限
+
+    steps:
+      - name: コードをチェックアウト
+        uses: actions/checkout@v4
+
+      - name: 拡張機能をZIPファイルに圧縮
+        # 拡張機能の動作に不要なファイル（.git系や説明書など）を除外して圧縮します
+        run: |
+          zip -r Gemini-Repo-Importer.zip . -x "*.git*" -x ".github/*" -x "README.md" -x "*.zip"
+
+      - name: GitHub Releaseを作成してZIPをアップロード
+        uses: softprops/action-gh-release@v2
+        with:
+          files: Gemini-Repo-Importer.zip
+          generate_release_notes: true # コミット履歴から自動でリリースノートを作成

@@ -38,64 +38,60 @@ function showToast(message) {
 }
 
 // ==========================================
-// スクロール制御用ロジック（キーボードシミュレーション方式）
+// スクロール制御用ロジック（CSS判定方式・修正版）
 // ==========================================
 function executeScroll(action) {
-  let key = '';
-  let keyCode = 0;
+  let scrollableTarget = null;
+  let maxScrollAmount = 0;
 
-  // ユーザーの提案通り、押すべきキーを判定
-  switch (action) {
-    case 'top':
-      key = 'Home'; keyCode = 36;
-      break;
-    case 'bottom':
-      key = 'End'; keyCode = 35;
-      break;
-    case 'up':
-      key = 'PageUp'; keyCode = 33;
-      break;
-    case 'down':
-      key = 'PageDown'; keyCode = 34;
-      break;
-  }
-
-  if (!key) return;
-
-  // 【重要】
-  // チャットの入力欄（テキストエリア）にカーソルがある状態でHomeやEndを押すと、
-  // 画面スクロールではなく「文字入力の先頭/末尾」に移動してしまうため、
-  // 一旦入力欄からフォーカスを外す（blur）処理を挟みます。
-  const activeEl = document.activeElement;
-  if (activeEl && typeof activeEl.blur === 'function') {
-    activeEl.blur();
-  }
-
-  // キーボードが押された（keydown）という擬似イベントを作成
-  const eventDown = new KeyboardEvent('keydown', {
-    key: key,
-    code: key,
-    keyCode: keyCode,
-    which: keyCode,
-    bubbles: true,
-    cancelable: true,
-    view: window
+  // 1. 画面内の全要素のCSSを確認し、実際にスクロール可能な領域を探す
+  document.querySelectorAll('*').forEach(el => {
+    const style = window.getComputedStyle(el);
+    // スクロールバーが表示される設定になっているか確認
+    if (style.overflowY === 'auto' || style.overflowY === 'scroll' || style.overflow === 'auto' || style.overflow === 'scroll') {
+      const scrollAmount = el.scrollHeight - el.clientHeight;
+      // 実際にスクロールする余地があり、ある程度の高さ(100px以上)を持つ要素を対象とする
+      if (scrollAmount > maxScrollAmount && el.clientHeight > 100) {
+        maxScrollAmount = scrollAmount;
+        scrollableTarget = el;
+      }
+    }
   });
 
-  // キーボードが離された（keyup）という擬似イベントを作成
-  const eventUp = new KeyboardEvent('keyup', {
-    key: key,
-    code: key,
-    keyCode: keyCode,
-    which: keyCode,
-    bubbles: true,
-    cancelable: true,
-    view: window
-  });
+  // 2. 見つかった内部コンテナと、念のため画面全体(window/document)の両方に命令を送る
+  const targets = [window, document.documentElement, document.body];
+  if (scrollableTarget) {
+    targets.unshift(scrollableTarget); // 最も怪しい内部コンテナを最優先に処理
+  }
 
-  // 画面全体（body）に対してイベントを強制発火させる
-  document.body.dispatchEvent(eventDown);
-  document.body.dispatchEvent(eventUp);
+  targets.forEach(target => {
+    try {
+      const isWin = (target === window || target === document.documentElement || target === document.body);
+      const clientHeight = isWin ? window.innerHeight : target.clientHeight;
+      const scrollHeight = isWin ? document.documentElement.scrollHeight : target.scrollHeight;
+
+      switch (action) {
+        case 'top':
+          if (isWin) window.scrollTo({ top: 0, behavior: 'smooth' });
+          else target.scrollTo({ top: 0, behavior: 'smooth' });
+          break;
+        case 'bottom':
+          if (isWin) window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'smooth' });
+          else target.scrollTo({ top: scrollHeight, behavior: 'smooth' });
+          break;
+        case 'up':
+          if (isWin) window.scrollBy({ top: -(window.innerHeight * 0.8), behavior: 'smooth' });
+          else target.scrollBy({ top: -(clientHeight * 0.8), behavior: 'smooth' });
+          break;
+        case 'down':
+          if (isWin) window.scrollBy({ top: (window.innerHeight * 0.8), behavior: 'smooth' });
+          else target.scrollBy({ top: (clientHeight * 0.8), behavior: 'smooth' });
+          break;
+      }
+    } catch (e) {
+      // エラーは無視して次の要素へ
+    }
+  });
 }
 
 // 1件のURL（またはパス）をインポートする処理
