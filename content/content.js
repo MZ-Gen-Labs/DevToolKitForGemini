@@ -202,21 +202,24 @@ async function smartModelSwitch(targetModelName) {
 
 // 1件のURLをインポートする処理
 async function importSingleUrl(targetString) {
-  let plusBtn = null;
-  const textarea = document.querySelector('textarea, rich-textarea, div[contenteditable="true"]');
+  // 新UIのクラスや属性を優先的に検索
+  let plusBtn = document.querySelector('button.upload-card-button, button[aria-controls="upload-file-menu"], button[aria-label*="ファイルをアップロード"]');
 
-  if (textarea) {
-    let container = textarea.parentElement;
-    while (container && container.tagName !== 'BODY') {
-      const allBtns = Array.from(container.querySelectorAll('button, div[role="button"]'));
-      plusBtn = allBtns.find(btn => {
-        const label = (btn.getAttribute('aria-label') || '').toLowerCase();
-        const isMatch = (label.includes('追加') || label.includes('add') || label.includes('ツール') || label.includes('アップロード'));
-        const isExclude = (label.includes('削除') || label.includes('remove') || label.includes('モデル') || label.includes('model') || label.includes('gemini'));
-        return isMatch && !isExclude;
-      });
-      if (plusBtn) break;
-      container = container.parentElement;
+  if (!plusBtn) {
+    const textarea = document.querySelector('textarea, rich-textarea, div[contenteditable="true"]');
+    if (textarea) {
+      let container = textarea.parentElement;
+      while (container && container.tagName !== 'BODY') {
+        const allBtns = Array.from(container.querySelectorAll('button, div[role="button"]'));
+        plusBtn = allBtns.find(btn => {
+          const label = (btn.getAttribute('aria-label') || '').toLowerCase();
+          const isMatch = (label.includes('追加') || label.includes('add') || label.includes('ツール') || label.includes('アップロード'));
+          const isExclude = (label.includes('削除') || label.includes('remove') || label.includes('モデル') || label.includes('model') || label.includes('gemini'));
+          return isMatch && !isExclude;
+        });
+        if (plusBtn) break;
+        container = container.parentElement;
+      }
     }
   }
 
@@ -233,24 +236,34 @@ async function importSingleUrl(targetString) {
   await sleep(600);
 
   // 「コードをインポート」を検索
-  const importCodeItem = Array.from(document.querySelectorAll('div, span, li, button, a'))
-    .find(el => el.innerText && (el.innerText.includes('コードをインポート') || el.innerText.includes('Import code')));
+  const findImportCodeItem = () => {
+    // 新UIのdata-test-idを優先
+    let item = document.querySelector('button[data-test-id="code-import-button"]');
+    if (item) return item;
+
+    // フォールバック（テキストベース）
+    return Array.from(document.querySelectorAll('div, span, li, button, a'))
+      .find(el => el.innerText && (el.innerText.includes('コードをインポート') || el.innerText.includes('Import code')));
+  };
+
+  let importCodeItem = findImportCodeItem();
 
   if (!importCodeItem) {
     await sleep(1000);
-    const retryItem = Array.from(document.querySelectorAll('div, span, li, button, a'))
-      .find(el => el.innerText && (el.innerText.includes('コードをインポート') || el.innerText.includes('Import code')));
-    if (!retryItem) throw new Error('「コードをインポート」メニューが見つかりませんでした。');
-    retryItem.click();
-  } else {
-    importCodeItem.click();
+    importCodeItem = findImportCodeItem();
+    if (!importCodeItem) throw new Error('「コードをインポート」メニューが見つかりませんでした。');
   }
+
+  importCodeItem.click();
 
   await sleep(1000);
   const isWebUrl = /^https?:\/\//i.test(targetString.trim());
 
   if (isWebUrl) {
-    let urlInput = document.querySelector('input[placeholder*="github.com"]');
+    let urlInput = document.querySelector('input[data-test-id="repo-url-input"]');
+    if (!urlInput) {
+      urlInput = document.querySelector('input[placeholder*="github.com"]');
+    }
     if (!urlInput) {
       const dialogs = document.querySelectorAll('dialog, [role="dialog"]');
       if (dialogs.length > 0) {
@@ -267,9 +280,12 @@ async function importSingleUrl(targetString) {
     urlInput.dispatchEvent(new Event('change', { bubbles: true }));
 
     await sleep(400);
-    // インポート実行ボタンをテキストベースで探す
-    const insertBtn = Array.from(document.querySelectorAll('button, div[role="button"]'))
-      .find(el => el.innerText && (el.innerText === 'インポート' || el.innerText === 'Import'));
+    // インポート実行ボタンを探す
+    let insertBtn = document.querySelector('button[data-test-id="import-repository-button"]');
+    if (!insertBtn) {
+      insertBtn = Array.from(document.querySelectorAll('button, div[role="button"]'))
+        .find(el => el.innerText && (el.innerText === 'インポート' || el.innerText === 'Import'));
+    }
 
     if (insertBtn) {
       insertBtn.click();
@@ -278,9 +294,12 @@ async function importSingleUrl(targetString) {
 
   } else {
     try { await navigator.clipboard.writeText(targetString); showToast(`📁パスをコピーしました: ${targetString}`); } catch (err) { }
-    // フォルダアップロードボタンを検索
-    const folderBtn = Array.from(document.querySelectorAll('div, span, button, a, label, p'))
-      .find(el => el.innerText && (el.innerText.includes('フォルダをアップロード') || el.innerText.includes('Upload folder')));
+    // フォルダアップロードボタンを探す
+    let folderBtn = document.querySelector('button[data-test-id="upload-code-folder-button"]');
+    if (!folderBtn) {
+      folderBtn = Array.from(document.querySelectorAll('div, span, button, a, label, p'))
+        .find(el => el.innerText && (el.innerText.includes('フォルダをアップロード') || el.innerText.includes('Upload folder')));
+    }
 
     if (folderBtn) {
       const c = folderBtn.closest('button') || folderBtn.closest('div[role="button"]') || folderBtn.closest('label') || folderBtn;
@@ -289,7 +308,8 @@ async function importSingleUrl(targetString) {
       while (dialogExists && waitCount < 120) {
         await sleep(1000);
         const dialogs = document.querySelectorAll('dialog, [role="dialog"]');
-        dialogExists = Array.from(dialogs).some(d => d.querySelector('input[placeholder*="github.com"]'));
+        // ダイアログが存在し続けるかどうかの判定（新旧のUI両対応）
+        dialogExists = Array.from(dialogs).some(d => d.querySelector('input[data-test-id="repo-url-input"]') || d.querySelector('input[placeholder*="github.com"]'));
         waitCount++;
       }
       await sleep(1500);
