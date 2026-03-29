@@ -39,7 +39,6 @@ function showToast(message) {
 
 // 1件のURL（またはパス）をインポートする処理
 async function importSingleUrl(targetString) {
-  // 1. 「+」ボタン（またはメニューを開くボタン）を探してクリック
   let plusBtn = null;
   let textarea = document.querySelector('textarea, rich-textarea, div[contenteditable="true"]');
   if (textarea) {
@@ -59,7 +58,6 @@ async function importSingleUrl(targetString) {
   plusBtn.click();
   await sleep(500);
 
-  // 2. 「コードをインポート」項目をクリック
   let importCodeItem = findTerminalElementByText('div, span, li, button, a', 'コードをインポート') ||
     findTerminalElementByText('div, span, li, button, a', 'Import code');
 
@@ -75,16 +73,11 @@ async function importSingleUrl(targetString) {
     importCodeItem.closest('button') || importCodeItem;
   clickableItem.click();
 
-  // ダイアログが開くアニメーションをしっかり待つ
   await sleep(1000);
 
-  // --- 入力値が WEB URL か ローカルパス かを判定 ---
   const isWebUrl = /^https?:\/\//i.test(targetString.trim());
 
   if (isWebUrl) {
-    // ==========================================
-    // パターンA: WEB URLの場合
-    // ==========================================
     let urlInput = document.querySelector('input[placeholder*="github.com"]');
     if (!urlInput) {
       const dialogs = document.querySelectorAll('dialog, [role="dialog"]');
@@ -128,9 +121,6 @@ async function importSingleUrl(targetString) {
     }
 
   } else {
-    // ==========================================
-    // パターンB: ローカルフォルダの場合
-    // ==========================================
     try {
       await navigator.clipboard.writeText(targetString);
       showToast(`📁パスをコピーしました: ${targetString}\n開いたダイアログで [Ctrl + V] を押してフォルダを選択してください。`);
@@ -140,36 +130,31 @@ async function importSingleUrl(targetString) {
     }
 
     let folderBtn = null;
-    // 【修正点】labelタグも含め、ボタンが表示されるまで最大5回リトライして確実に探す
     const selector = 'div, span, button, a, label, p';
 
     for (let i = 0; i < 5; i++) {
       folderBtn = findTerminalElementByText(selector, 'フォルダをアップロード') ||
         findTerminalElementByText(selector, 'Upload folder');
       if (folderBtn) break;
-      await sleep(500); // 見つからなければ0.5秒待って再検索
+      await sleep(500);
     }
 
     if (folderBtn) {
-      // 【修正点】見つけた要素自体、もしくは親のボタン要素を確実にクリックさせる
       let targetBtn = folderBtn.closest('button') || folderBtn.closest('div[role="button"]') || folderBtn.closest('label') || folderBtn;
 
-      // SPAフレームワーク対策：念のためMouse Eventも発火させる
       targetBtn.click();
       targetBtn.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, view: window }));
       targetBtn.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, view: window }));
 
-      // OSのダイアログが開いたあと、元のインポートダイアログが消えるまで待機する
       let waitCount = 0;
       let dialogExists = true;
-      while (dialogExists && waitCount < 120) { // 最大2分間（OSダイアログでのユーザー操作）待機
+      while (dialogExists && waitCount < 120) {
         await sleep(1000);
         const dialogs = document.querySelectorAll('dialog, [role="dialog"]');
         dialogExists = Array.from(dialogs).some(d => d.querySelector('input[placeholder*="github.com"]'));
         waitCount++;
       }
 
-      // ダイアログが消えた後、次の処理へ進むためのバッファ
       await sleep(1000);
 
     } else {
@@ -178,7 +163,7 @@ async function importSingleUrl(targetString) {
   }
 }
 
-// 自動インポート処理本体（複数対応）
+// 自動インポート処理本体
 async function runAutoImport() {
   const button = document.getElementById('gemini-auto-import-btn');
   button.textContent = '処理中...';
@@ -241,6 +226,56 @@ async function runAutoImport() {
   }
 }
 
+// ==========================================
+// ドラッグ＆ドロップ機能のグローバル管理
+// ==========================================
+let isDragging = false;
+let hasMoved = false;
+let startX, startY, initialX, initialY;
+let dragTarget = null;
+
+if (!window.geminiDragInitialized) {
+  window.geminiDragInitialized = true;
+
+  document.addEventListener('mousemove', (e) => {
+    if (!isDragging || !dragTarget) return;
+
+    const dx = e.clientX - startX;
+    const dy = e.clientY - startY;
+
+    // 3px以上動いたら「ドラッグ」とみなす
+    if (!hasMoved && (Math.abs(dx) > 3 || Math.abs(dy) > 3)) {
+      hasMoved = true;
+    }
+
+    if (hasMoved) {
+      dragTarget.style.bottom = 'auto';
+      dragTarget.style.right = 'auto';
+      dragTarget.style.left = `${initialX + dx}px`;
+      dragTarget.style.top = `${initialY + dy}px`;
+    }
+  });
+
+  document.addEventListener('mouseup', async () => {
+    if (!isDragging || !dragTarget) return;
+    isDragging = false;
+
+    if (hasMoved) {
+      // マウスを離した時に位置をストレージに保存
+      await chrome.storage.local.set({
+        widgetPosition: {
+          left: dragTarget.style.left,
+          top: dragTarget.style.top
+        }
+      });
+      // クリックイベントが暴発しないよう少し待ってからフラグを下ろす
+      setTimeout(() => { hasMoved = false; dragTarget = null; }, 50);
+    } else {
+      dragTarget = null;
+    }
+  });
+}
+
 // UIの構築と描画
 async function renderRepoPanel() {
   let container = document.getElementById('gemini-auto-import-container');
@@ -252,7 +287,17 @@ async function renderRepoPanel() {
 
   container.innerHTML = '';
 
-  const data = await chrome.storage.local.get(['repos']);
+  // 保存されている位置情報とリストデータを取得
+  const data = await chrome.storage.local.get(['repos', 'widgetPosition']);
+
+  // 位置情報の復元
+  if (data.widgetPosition) {
+    container.style.bottom = 'auto';
+    container.style.right = 'auto';
+    container.style.left = data.widgetPosition.left;
+    container.style.top = data.widgetPosition.top;
+  }
+
   let repos = data.repos || [];
 
   if (repos.length > 0) {
@@ -296,6 +341,31 @@ async function renderRepoPanel() {
   btn.textContent = '📥 自動インポート';
   btn.addEventListener('click', runAutoImport);
   container.appendChild(btn);
+
+  // --- コンテナに対してドラッグ開始の判定を付与 ---
+  container.addEventListener('mousedown', (e) => {
+    // リストパネル内のスクロール操作やチェックボックス操作の時はドラッグしない
+    if (e.target.tagName.toLowerCase() === 'input') return;
+    if (e.target.closest('#gemini-auto-import-panel')) return;
+
+    isDragging = true;
+    hasMoved = false;
+    dragTarget = container;
+
+    const rect = container.getBoundingClientRect();
+    initialX = rect.left;
+    initialY = rect.top;
+    startX = e.clientX;
+    startY = e.clientY;
+  });
+
+  // ドラッグ直後にボタンがクリックされてしまうのを防ぐ
+  container.addEventListener('click', (e) => {
+    if (hasMoved) {
+      e.stopPropagation();
+      e.preventDefault();
+    }
+  }, true);
 }
 
 // SPAでの画面遷移に対応するためObserverで監視
