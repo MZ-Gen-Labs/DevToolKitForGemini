@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Dev Toolkit for Gemini",
-  "version": "0.0.9",
+  "version": "0.0.10",
   "description": "Geminiのチャット画面で、リポジトリの一括インポート、モデル切り替え、スクロール補助などの開発者向け便利機能を提供します。",
   "permissions": [
     "storage",

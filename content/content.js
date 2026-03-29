@@ -506,12 +506,12 @@ if (!window.geminiDragInitialized) {
       dragTarget.style.bottom = 'auto'; dragTarget.style.right = 'auto';
       dragTarget.style.left = `${initialX + dx}px`; dragTarget.style.top = `${initialY + dy}px`;
     }
-  });
+  }, { passive: true });
   document.addEventListener('mouseup', async () => {
     if (!isDragging || !dragTarget) return;
     if (hasMoved) await chrome.storage.local.set({ widgetPosition: { left: dragTarget.style.left, top: dragTarget.style.top } });
     isDragging = false; setTimeout(() => { hasMoved = false; dragTarget = null; }, 50);
-  });
+  }, { passive: true });
 }
 
 async function renderRepoPanel() {

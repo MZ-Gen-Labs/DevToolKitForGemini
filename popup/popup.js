@@ -99,7 +99,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // セキュリティ＆UX向上のための簡易バリデーション
     const isWebUrl = /^https?:\/\//i.test(url);
-    const isWindowsPath = /^[a-zA-Z]:\\/.test(url);
+    const isWindowsPath = /^[a-zA-Z]:[\\/]/.test(url);
     const isUnixPath = /^\//.test(url);
     
     if (!isWebUrl && !isWindowsPath && !isUnixPath) {
