@@ -1,16 +1,21 @@
 <!DOCTYPE html>
 <html lang="ja">
+
 <head>
   <meta charset="UTF-8">
   <link rel="stylesheet" href="popup.css">
   <title>Repo Importer</title>
 </head>
+
 <body>
   <h3>設定</h3>
-  <label for="githubUrl">インポートするGitHub URL</label>
-  <input type="text" id="githubUrl" placeholder="https://github.com/user/repo" />
-  <button id="saveBtn">URLを保存</button>
+  <div class="input-group">
+    <input type="text" id="githubUrl" placeholder="https://github.com/user/repo" />
+    <button id="addBtn">追加</button>
+  </div>
   <div id="status"></div>
+  <ul id="repoList"></ul>
   <script src="popup.js"></script>
 </body>
+
 </html>

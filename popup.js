@@ -1,29 +1,79 @@
 document.addEventListener('DOMContentLoaded', () => {
   const urlInput = document.getElementById('githubUrl');
-  const saveBtn = document.getElementById('saveBtn');
+  const addBtn = document.getElementById('addBtn');
   const statusEl = document.getElementById('status');
+  const repoListEl = document.getElementById('repoList');
 
-  // 保存済みのURLを読み込んで反映
-  chrome.storage.local.get(['githubUrl'], (result) => {
-    if (result.githubUrl) {
-      urlInput.value = result.githubUrl;
-    }
-  });
+  // データ構造: repos = [{ url: '...', checked: true, lastImported: timestamp }]
 
-  // 保存ボタンが押されたときの処理
-  saveBtn.addEventListener('click', () => {
+  function loadRepos() {
+    chrome.storage.local.get(['repos', 'githubUrl'], (result) => {
+      let repos = result.repos || [];
+      // 旧バージョンの単一URLデータの移行処理
+      if (!result.repos && result.githubUrl) {
+        repos = [{ url: result.githubUrl, checked: true, lastImported: 0 }];
+        chrome.storage.local.set({ repos });
+        chrome.storage.local.remove('githubUrl');
+      }
+      renderList(repos);
+    });
+  }
+
+  function renderList(repos) {
+    repoListEl.innerHTML = '';
+    repos.forEach((repo, index) => {
+      const li = document.createElement('li');
+      const span = document.createElement('span');
+      span.textContent = repo.url;
+
+      const delBtn = document.createElement('button');
+      delBtn.textContent = '削除';
+      delBtn.className = 'delete-btn';
+      delBtn.addEventListener('click', () => {
+        repos.splice(index, 1);
+        saveRepos(repos, '削除しました');
+      });
+
+      li.appendChild(span);
+      li.appendChild(delBtn);
+      repoListEl.appendChild(li);
+    });
+  }
+
+  function saveRepos(repos, msg) {
+    chrome.storage.local.set({ repos }, () => {
+      loadRepos();
+      showStatus(msg, '#0f9d58');
+    });
+  }
+
+  function showStatus(msg, color) {
+    statusEl.textContent = msg;
+    statusEl.style.color = color;
+    setTimeout(() => {
+      statusEl.textContent = '';
+    }, 2000);
+  }
+
+  addBtn.addEventListener('click', () => {
     const url = urlInput.value.trim();
     if (!url) {
-      statusEl.textContent = 'URLを入力してください。';
-      statusEl.style.color = '#c5221f';
+      showStatus('URLを入力してください。', '#c5221f');
       return;
     }
-    chrome.storage.local.set({ githubUrl: url }, () => {
-      statusEl.textContent = '保存しました！';
-      statusEl.style.color = '#0f9d58';
-      setTimeout(() => {
-        statusEl.textContent = '';
-      }, 2000);
+
+    chrome.storage.local.get(['repos'], (result) => {
+      const repos = result.repos || [];
+      if (repos.some(r => r.url === url)) {
+        showStatus('既に登録されています。', '#c5221f');
+        return;
+      }
+      // 新規追加。初期状態はチェックON、インポート履歴なし(0)
+      repos.push({ url, checked: true, lastImported: 0 });
+      saveRepos(repos, '追加しました！');
+      urlInput.value = '';
     });
   });
+
+  loadRepos();
 });
