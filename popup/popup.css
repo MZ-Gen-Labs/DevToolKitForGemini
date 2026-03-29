@@ -7,8 +7,46 @@ body {
 
 h3 {
   margin-top: 0;
-  margin-bottom: 12px;
+  margin-bottom: 8px;
   font-size: 16px;
+  text-align: center;
+}
+
+h4 {
+  margin-top: 0;
+  margin-bottom: 8px;
+  font-size: 13px;
+  color: #555;
+}
+
+.divider {
+  border: none;
+  border-top: 1px solid #ddd;
+  margin: 12px 0;
+}
+
+.settings-section {
+  background-color: #f8f9fa;
+  border-radius: 6px;
+  padding: 10px;
+  margin-bottom: 12px;
+}
+
+.setting-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 13px;
+  margin-bottom: 6px;
+  cursor: pointer;
+}
+
+.setting-item:last-child {
+  margin-bottom: 0;
+}
+
+.setting-item input[type="range"] {
+  width: 100px;
 }
 
 .input-group {

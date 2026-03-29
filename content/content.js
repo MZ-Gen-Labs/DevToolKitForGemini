@@ -1,5 +1,71 @@
 // content/content.js
 
+// スクロールバーの動的スタイル適用
+function applyScrollbarStyle(config) {
+  const styleId = 'gemini-dev-scrollbar-style';
+  let styleEl = document.getElementById(styleId);
+
+  // OFF設定の場合はスタイル要素を削除して終了
+  if (config.sbEnabled === false) {
+    if (styleEl) styleEl.remove();
+    return;
+  }
+
+  // デフォルト値
+  const width = config.sbWidth || 8;
+  const isTransparent = config.sbTransparent !== false; // デフォルトtrue
+  const trackColor = isTransparent ? 'transparent' : 'rgba(0, 0, 0, 0.05)';
+  
+  // FireFox用の scrollbar-width の計算
+  const fw = width < 12 ? 'thin' : 'auto';
+  
+  const css = `
+    /* Geminiの隠されたスクロールバーを強制表示（動的生成） */
+    body * {
+      scrollbar-width: ${fw} !important;
+      scrollbar-color: rgba(0, 0, 0, 0.3) ${trackColor} !important;
+    }
+
+    body *::-webkit-scrollbar {
+      display: block !important;
+      width: ${width}px !important;
+      height: ${width}px !important;
+    }
+
+    body *::-webkit-scrollbar-track {
+      background: ${trackColor} !important;
+    }
+
+    body *::-webkit-scrollbar-thumb {
+      background-color: rgba(0, 0, 0, 0.25) !important;
+      border-radius: ${Math.max(2, width / 2)}px !important;
+    }
+
+    body *::-webkit-scrollbar-thumb:hover {
+      background-color: rgba(0, 0, 0, 0.45) !important;
+    }
+  `;
+
+  if (!styleEl) {
+    styleEl = document.createElement('style');
+    styleEl.id = styleId;
+    document.head.appendChild(styleEl);
+  }
+  styleEl.textContent = css;
+}
+
+// 初期ロードと設定変更の監視
+chrome.storage.local.get(['sbEnabled', 'sbWidth', 'sbTransparent'], (result) => {
+  applyScrollbarStyle(result);
+});
+
+chrome.storage.onChanged.addListener((changes, namespace) => {
+  if (namespace === 'local' && (changes.sbEnabled || changes.sbWidth || changes.sbTransparent)) {
+    chrome.storage.local.get(['sbEnabled', 'sbWidth', 'sbTransparent'], (result) => {
+      applyScrollbarStyle(result);
+    });
+  }
+});
 // utility: 指定したミリ秒待機する
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 

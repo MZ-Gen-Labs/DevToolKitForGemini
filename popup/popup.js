@@ -4,6 +4,36 @@ document.addEventListener('DOMContentLoaded', () => {
   const statusEl = document.getElementById('status');
   const repoListEl = document.getElementById('repoList');
 
+  // スクロールバー設定要素
+  const sbEnabled = document.getElementById('sbEnabled');
+  const sbWidth = document.getElementById('sbWidth');
+  const sbWidthValue = document.getElementById('sbWidthValue');
+  const sbTransparent = document.getElementById('sbTransparent');
+
+  // 設定の読み込み
+  chrome.storage.local.get(['sbEnabled', 'sbWidth', 'sbTransparent'], (result) => {
+    sbEnabled.checked = result.sbEnabled !== false; // 初期値 true
+    sbWidth.value = result.sbWidth || 8;
+    sbWidthValue.textContent = sbWidth.value;
+    sbTransparent.checked = result.sbTransparent !== false; // 初期値 true
+  });
+
+  // 設定の保存
+  const saveScrollSettings = () => {
+    chrome.storage.local.set({
+      sbEnabled: sbEnabled.checked,
+      sbWidth: parseInt(sbWidth.value, 10),
+      sbTransparent: sbTransparent.checked
+    });
+  };
+
+  sbEnabled.addEventListener('change', saveScrollSettings);
+  sbWidth.addEventListener('input', () => {
+    sbWidthValue.textContent = sbWidth.value;
+    saveScrollSettings();
+  });
+  sbTransparent.addEventListener('change', saveScrollSettings);
+
   // データ構造: repos = [{ url: '...', checked: true, lastImported: timestamp }]
 
   function loadRepos() {

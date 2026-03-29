@@ -9,6 +9,26 @@
 
 <body>
   <h3>設定</h3>
+
+  <div class="settings-section">
+    <h4>🎨 表示設定</h4>
+    <label class="setting-item">
+      <span>スクロールバーの強制表示</span>
+      <input type="checkbox" id="sbEnabled" checked>
+    </label>
+    <label class="setting-item">
+      <span>幅 (<span id="sbWidthValue">8</span>px)</span>
+      <input type="range" id="sbWidth" min="4" max="24" step="1" value="8">
+    </label>
+    <label class="setting-item">
+      <span>背景（トラック）の透明化</span>
+      <input type="checkbox" id="sbTransparent" checked>
+    </label>
+  </div>
+  
+  <hr class="divider">
+
+  <h4>🔰 リポジトリ設定</h4>
   <div class="input-group">
     <input type="text" id="githubUrl" placeholder="https://github.com/... または C:\git\..." />
     <button id="addBtn">追加</button>
