@@ -17,10 +17,10 @@ function applyScrollbarStyle(config) {
   width = Math.max(4, Math.min(width, 24)); // 4px 〜 24px の間に制限
   const isTransparent = config.sbTransparent !== false; // デフォルトtrue
   const trackColor = isTransparent ? 'transparent' : 'rgba(0, 0, 0, 0.05)';
-  
+
   // FireFox用の scrollbar-width の計算
   const fw = width < 12 ? 'thin' : 'auto';
-  
+
   const css = `
     /* Geminiの隠されたスクロールバーを強制表示（動的生成） */
     body * {
@@ -372,6 +372,10 @@ async function importSingleUrl(targetString) {
   if (!importCodeItem) throw new Error('「コードをインポート」メニューが見つかりませんでした。');
 
   importCodeItem.click();
+
+  // Gemini本体がダイアログを表示し、入力欄をリセットし終わるまで待機する
+  await sleep(800);
+
   const isWebUrl = /^https?:\/\//i.test(targetString.trim());
 
   if (isWebUrl) {
@@ -581,8 +585,8 @@ async function renderRepoPanel() {
     const b = document.createElement('button'); b.className = 'gemini-scroll-btn'; b.type = 'button'; b.textContent = t; b.title = ti; b.addEventListener('click', (e) => { e.stopPropagation(); e.preventDefault(); executeScroll(a); }); return b;
   };
   sg.appendChild(csb('⏫', 'トップ', 'top')); sg.appendChild(csb('🔼', '上', 'up')); sg.appendChild(csb('🔽', '下', 'down')); sg.appendChild(csb('⏬', 'ラスト', 'bottom'));
-  bg.appendChild(sg); 
-  
+  bg.appendChild(sg);
+
   // ジャンプコントローラー (新規: 前/次の質問、前/次のコード)
   const jg = document.createElement('div'); jg.className = 'gemini-scroll-group';
   const cjb = (t, ti, selector, dir) => {
@@ -593,7 +597,7 @@ async function renderRepoPanel() {
   jg.appendChild(cjb('💻⬆️', '前のコードへ', 'code-block', 'prev'));
   jg.appendChild(cjb('💻⬇️', '次のコードへ', 'code-block', 'next'));
   bg.appendChild(jg);
-  
+
   container.appendChild(bg);
 
   container.addEventListener('mousedown', (e) => {
