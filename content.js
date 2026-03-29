@@ -20,6 +20,7 @@ function findTerminalElementByText(selector, textSearch) {
 
 // 1件のURLをインポートする処理
 async function importSingleUrl(url) {
+  // 2. 「+」ボタン（またはメニューを開くボタン）を探してクリック
   let plusBtn = null;
   let textarea = document.querySelector('textarea, rich-textarea, div[contenteditable="true"]');
   if (textarea) {
@@ -39,6 +40,7 @@ async function importSingleUrl(url) {
   plusBtn.click();
   await sleep(500);
 
+  // 3. 「コードをインポート」項目をクリック
   let importCodeItem = findTerminalElementByText('div, span, li, button, a', 'コードをインポート') ||
     findTerminalElementByText('div, span, li, button, a', 'Import code');
 
@@ -55,6 +57,7 @@ async function importSingleUrl(url) {
   clickableItem.click();
   await sleep(800);
 
+  // 4. ダイアログの入力欄にURLを入力
   let urlInput = document.querySelector('input[placeholder*="github.com"]');
   if (!urlInput) {
     const dialogs = document.querySelectorAll('dialog, [role="dialog"]');
@@ -75,6 +78,7 @@ async function importSingleUrl(url) {
 
   urlInput.focus();
 
+  // SPAフレームワークの内部Stateを更新させるためのハック
   const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
   if (nativeInputValueSetter) {
     nativeInputValueSetter.call(urlInput, url);
@@ -86,13 +90,14 @@ async function importSingleUrl(url) {
 
   await sleep(400);
 
+  // 5. 「インポート」ボタンをクリック
   let insertBtn = findTerminalElementByText('button, div[role="button"]', 'インポート') ||
     findTerminalElementByText('button, div[role="button"]', 'Import');
 
   if (insertBtn) {
     let targetBtn = insertBtn.closest('button') || insertBtn.closest('div[role="button"]') || insertBtn;
     targetBtn.click();
-    await sleep(1000);
+    await sleep(1000); // 完了まで少し待機
   } else {
     throw new Error('「インポート」実行ボタンが見つかりませんでした。');
   }
@@ -109,23 +114,23 @@ async function runAutoImport() {
     const data = await chrome.storage.local.get(['repos']);
     let repos = data.repos || [];
 
+    // チェックされているURLのみ抽出
     const targets = repos.filter(r => r.checked);
-    let hasError = false; // エラー発生フラグ
+    let hasError = false;
 
     if (targets.length === 0) {
       alert('自動インポート機能：インポート対象にチェックを入れてください。');
       return;
     }
 
+    // 選択されたものを順番にインポート
     for (let i = 0; i < targets.length; i++) {
       button.textContent = `インポート中 (${i + 1}/${targets.length})`;
       const targetUrl = targets[i].url;
 
       try {
-        // 【改善】単一URLのインポートでエラーが出ても全体を止めないようtry-catchで囲む
         await importSingleUrl(targetUrl);
-
-        // 成功時のみlastImportedを更新
+        // インポート成功後、lastImportedを現在時刻に更新
         const repoIndex = repos.findIndex(r => r.url === targetUrl);
         if (repoIndex !== -1) {
           repos[repoIndex].lastImported = Date.now();
@@ -135,16 +140,16 @@ async function runAutoImport() {
         hasError = true;
       }
 
-      // 次のインポートとの間隔
+      // 次のインポートとの間隔を少し開ける（UIの安定・アニメーション完了待ちのため）
       if (i < targets.length - 1) {
         await sleep(1500);
       }
     }
 
+    // 更新した履歴情報を保存し、リストを再描画（ソート順がここで反映されます）
     await chrome.storage.local.set({ repos });
     renderRepoPanel();
 
-    // エラーがあったかどうかに応じてボタンの文言を変更
     if (hasError) {
       button.textContent = '一部失敗しました';
       button.style.backgroundColor = '#ea4335'; // 赤色
@@ -155,7 +160,7 @@ async function runAutoImport() {
 
   } catch (err) {
     console.error(err);
-    alert('自動インポート機能：致命的なエラーが発生しました。\n' + err.message);
+    alert('自動インポート機能：予期せぬエラーが発生しました。\n' + err.message);
   } finally {
     setTimeout(() => {
       button.textContent = '📥 自動インポート';
@@ -174,9 +179,8 @@ async function renderRepoPanel() {
     document.body.appendChild(container);
   }
 
-  container.innerHTML = '';
+  container.innerHTML = ''; // クリアして再構築
 
-  // githubUrlの読み込みおよび移行処理を削除
   const data = await chrome.storage.local.get(['repos']);
   let repos = data.repos || [];
 
@@ -184,6 +188,7 @@ async function renderRepoPanel() {
     const panel = document.createElement('div');
     panel.id = 'gemini-auto-import-panel';
 
+    // 最近インポートされた順（lastImportedの降順）にソート
     const sortedRepos = [...repos].sort((a, b) => (b.lastImported || 0) - (a.lastImported || 0));
 
     sortedRepos.forEach(repo => {
@@ -194,6 +199,7 @@ async function renderRepoPanel() {
       checkbox.type = 'checkbox';
       checkbox.checked = repo.checked;
 
+      // チェックボックスの状態が変わったら即座に保存
       checkbox.addEventListener('change', async (e) => {
         const currentData = await chrome.storage.local.get(['repos']);
         let currentRepos = currentData.repos || [];
@@ -206,7 +212,7 @@ async function renderRepoPanel() {
 
       const label = document.createElement('span');
       label.textContent = repo.url;
-      label.title = repo.url;
+      label.title = repo.url; // ホバー時に全URLが見えるように
 
       item.appendChild(checkbox);
       item.appendChild(label);
@@ -222,7 +228,7 @@ async function renderRepoPanel() {
   container.appendChild(btn);
 }
 
-// Observerで監視
+// SPAでの画面遷移に対応するためObserverで監視
 const observer = new MutationObserver(() => {
   if (!document.getElementById('gemini-auto-import-container')) {
     renderRepoPanel();

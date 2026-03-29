@@ -52,7 +52,6 @@ document.addEventListener('DOMContentLoaded', () => {
   addBtn.addEventListener('click', () => {
     const url = urlInput.value.trim();
 
-    // 未入力チェックのみ残し、GitHub URLの形式チェックを削除しました
     if (!url) {
       showStatus('URLを入力してください。', '#c5221f');
       return;

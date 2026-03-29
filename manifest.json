@@ -18,8 +18,12 @@
       "matches": [
         "https://gemini.google.com/app*"
       ],
-      "css": ["content.css"],
-      "js": ["content.js"],
+      "css": [
+        "content.css"
+      ],
+      "js": [
+        "content.js"
+      ],
       "run_at": "document_end"
     }
   ]
