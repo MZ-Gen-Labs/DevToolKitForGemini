@@ -1,0 +1,26 @@
+{
+  "manifest_version": 3,
+  "name": "Gemini Repo Importer",
+  "version": "1.0",
+  "description": "Geminiのチャット画面で、記憶したGitHubリポジトリURLをボタン1つで一発インポートします。",
+  "permissions": [
+    "storage"
+  ],
+  "host_permissions": [
+    "*://gemini.google.com/*"
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Gemini Repo Importer 設定"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://gemini.google.com/app*"
+      ],
+      "css": ["content.css"],
+      "js": ["content.js"],
+      "run_at": "document_end"
+    }
+  ]
+}
