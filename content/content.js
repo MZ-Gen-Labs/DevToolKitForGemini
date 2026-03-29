@@ -89,13 +89,12 @@ function executeScroll(action) {
 }
 
 // ==========================================
-// モデル切り替え用ロジック (強化版)
+// モデル切り替え用ロジック (Pro制限判定強化版)
 // ==========================================
 async function executeModelSwitch(targetModelName) {
   let modelBtn = null;
   const selectors = 'button, div[role="button"]';
 
-  // 1. 現在のモデル名が表示されているボタンを探す
   const currentButtons = Array.from(document.querySelectorAll(selectors));
   modelBtn = currentButtons.find(btn => {
     const text = btn.textContent;
@@ -104,30 +103,57 @@ async function executeModelSwitch(targetModelName) {
   });
 
   if (!modelBtn) throw new Error('モデル選択ボタンが見つかりませんでした。');
-
   modelBtn.click();
   await sleep(800);
 
-  // 2. メニューの中から対象のモデル名を厳密に探す
   const menuItems = Array.from(document.querySelectorAll('div[role="menuitem"], li, button'));
-  let modelItem = menuItems.find(item => {
-    const text = item.textContent.trim();
-    // 説明文を避けるため、テキストの開始部分で判定
-    return text.startsWith(targetModelName);
-  });
+  let modelItem = menuItems.find(item => item.textContent.trim().startsWith(targetModelName));
 
   if (!modelItem) {
     modelItem = findTerminalElementByText('div, span, li', targetModelName);
   }
 
-  if (!modelItem) throw new Error(`モデル「${targetModelName}」が見つかりませんでした。`);
+  if (!modelItem) {
+    throw new Error(`${targetModelName} がメニューに見つかりません。`);
+  }
 
-  // 3. クリック実行
   const clickable = modelItem.getAttribute('role') === 'menuitem' ? modelItem : (modelItem.closest('div[role="menuitem"]') || modelItem);
-  clickable.click();
 
+  // 判定強化: aria-disabled に加え、テキストに「上限」や「リセット」が含まれているかチェック
+  const itemText = clickable.textContent;
+  const isLimited = clickable.getAttribute('aria-disabled') === 'true' ||
+    clickable.classList.contains('disabled') ||
+    itemText.includes('上限') ||
+    itemText.includes('リセット');
+
+  if (isLimited) {
+    throw new Error(`${targetModelName} は現在レートリミット等で制限されています。`);
+  }
+
+  clickable.click();
   showToast(`🤖 モデルを ${targetModelName} に切り替えました`);
   await sleep(1000);
+}
+
+// モデル切り替えを実行し、Proが制限されている場合は思考モードを試す
+async function smartModelSwitch(targetModelName) {
+  try {
+    await executeModelSwitch(targetModelName);
+  } catch (e) {
+    if (targetModelName === 'Pro') {
+      showToast('⚠️ Pro制限中のため、思考モードに切り替えを試みます...');
+      console.warn('Pro switch failed, falling back to 思考モード:', e.message);
+      try {
+        await executeModelSwitch('思考モード');
+      } catch (err) {
+        console.error('思考モードへの切り替えも失敗しました:', err);
+        showToast('❌ モデルの自動切り替えに失敗しました。');
+      }
+    } else {
+      showToast(`❌ 切り替え失敗: ${e.message}`);
+      throw e;
+    }
+  }
 }
 
 // 1件のURLをインポートする処理
@@ -322,7 +348,10 @@ async function renderRepoPanel() {
   modelSelect.addEventListener('change', async (e) => await chrome.storage.local.set({ selectedModel: e.target.value }));
   const modelApplyBtn = document.createElement('button');
   modelApplyBtn.className = 'gemini-model-apply-btn'; modelApplyBtn.textContent = '切替';
-  modelApplyBtn.addEventListener('click', (e) => { e.stopPropagation(); executeModelSwitch(modelSelect.value); });
+  modelApplyBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    smartModelSwitch(modelSelect.value);
+  });
   modelGroup.appendChild(modelSelect); modelGroup.appendChild(modelApplyBtn);
 
   let repos = data.repos || [];
@@ -351,10 +380,13 @@ async function renderRepoPanel() {
   const ab = document.createElement('button'); ab.id = 'gemini-auto-import-btn'; ab.className = 'gemini-action-btn'; ab.type = 'button'; ab.textContent = '📥 自動インポート';
   ab.addEventListener('click', async () => {
     const currentData = await chrome.storage.local.get(['selectedModel']);
-    if (currentData.selectedModel) try { await executeModelSwitch(currentData.selectedModel); } catch (e) { }
+    if (currentData.selectedModel) {
+      try { await smartModelSwitch(currentData.selectedModel); } catch (e) { }
+    }
     runAutoImport();
   });
   bg.appendChild(ab);
+
   const sg = document.createElement('div'); sg.className = 'gemini-scroll-group';
   const csb = (t, ti, a) => {
     const b = document.createElement('button'); b.className = 'gemini-scroll-btn'; b.type = 'button'; b.textContent = t; b.title = ti; b.addEventListener('click', (e) => { e.stopPropagation(); e.preventDefault(); executeScroll(a); }); return b;
