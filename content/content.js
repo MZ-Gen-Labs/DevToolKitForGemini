@@ -161,10 +161,9 @@ function executeScroll(action) {
 
 // 相対スクロールジャンプ（前の質問、次のコードなどへ移動）
 function scrollRelative(selector, direction) {
-  // 画面上に存在する対象要素（質問ブロックやコードブロック）をすべて取得
   const elements = Array.from(document.querySelectorAll(selector)).filter(el => {
     const rect = el.getBoundingClientRect();
-    return rect.height > 0; // 表示されているもののみ
+    return rect.height > 0;
   });
 
   if (elements.length === 0) {
@@ -172,12 +171,9 @@ function scrollRelative(selector, direction) {
     return;
   }
 
-  // Geminiの固定ヘッダー（上部メニューバー）の高さを考慮したマージン。
-  // 表示が崩れる場合や、将来的にUI変更があった際はこの値を調整してください。
   const OFFSET = 80;
 
   if (direction === 'next') {
-    // 現在のスクロール位置（一番上の表示領域）より「下」にある最初の要素を探す
     const target = elements.find(el => Math.round(el.getBoundingClientRect().top) > (OFFSET + 10));
     if (target) {
       target.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -185,7 +181,6 @@ function scrollRelative(selector, direction) {
       showToast('これ以上、次の要素はありません');
     }
   } else if (direction === 'prev') {
-    // 現在のスクロール位置より「上」にある最後の要素を探す（配列を逆順にして上に向かって探索）
     const target = [...elements].reverse().find(el => Math.round(el.getBoundingClientRect().top) < (OFFSET - 10));
     if (target) {
       target.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -199,8 +194,6 @@ function scrollRelative(selector, direction) {
 // モデル切り替え用ロジック (構造変更対応版)
 // ==========================================
 async function executeModelSwitch(targetModelName) {
-  // 1. モデル選択ボタン（現在表示されているモデル名が書いてあるボタン）を探す
-  // 新UI (data-test-id または input-area-switch クラス) を優先的に検索
   let modelBtn = document.querySelector('button[data-test-id="bard-mode-menu-button"]');
 
   if (!modelBtn) {
@@ -214,15 +207,12 @@ async function executeModelSwitch(targetModelName) {
 
   if (!modelBtn) throw new Error('モデル選択ボタンが見つかりませんでした。');
 
-  // 2. メニューが開いているか確認。開いていなければクリックして開く
-  // 新UIのクラス (gds-mode-switch-menu) などを含むパネルを探す
   const menuVisible = !!document.querySelector('div[role="menu"].gds-mode-switch-menu, [role="listbox"], .mat-menu-panel, .kb-menu');
   if (!menuVisible) {
     modelBtn.click();
-    await sleep(800); // メニューが描画されるまで少し長めに待機
+    await sleep(800);
   }
 
-  // 3. ターゲットとなるキーワードの定義
   const testIdMap = {
     'Pro': ['bard-mode-option-pro', 'bard-mode-option-gemini-advanced'],
     '思考モード': ['bard-mode-option-思考モード', 'bard-mode-option-thinking'],
@@ -238,10 +228,8 @@ async function executeModelSwitch(targetModelName) {
   const targetTestIds = testIdMap[targetModelName] || [];
   const searchTerms = nameMap[targetModelName] || [targetModelName];
 
-  // 4. 要素の特定
   let clickable = null;
 
-  // まず data-test-id から正確なボタン要素を探す
   for (const tid of targetTestIds) {
     const el = document.querySelector(`[data-test-id="${tid}"]`);
     if (el) {
@@ -250,7 +238,6 @@ async function executeModelSwitch(targetModelName) {
     }
   }
 
-  // 見つからなかった場合のフォールバック（旧UIや文言変更対応）
   if (!clickable) {
     const potentialItems = Array.from(document.querySelectorAll('div[role="menuitem"], [role="option"], button[mat-menu-item], span, div'));
     let foundElement = null;
@@ -274,22 +261,16 @@ async function executeModelSwitch(targetModelName) {
     throw new Error(`${targetModelName} をメニュー内で特定できませんでした。`);
   }
 
-  // 5. グレーアウト（制限）判定
-  // Disabledプロパティやクラス構成を総合して判定
   const isDisabledAttr = clickable.disabled === true || clickable.getAttribute('disabled') === 'true';
   const isAriaDisabled = clickable.getAttribute('aria-disabled') === 'true';
   const hasDisabledClass = clickable.classList.contains('disabled') || clickable.innerText.includes('上限');
   const style = window.getComputedStyle(clickable);
 
-  // 制限時、要素がクリック不可になっている場合にエラーとする
   if (isDisabledAttr || isAriaDisabled || hasDisabledClass || style.pointerEvents === 'none') {
-    // メニューを開いたままにしないよう、画面のどこかをクリックして閉じる
     document.body.click();
     throw new Error(`${targetModelName} は現在制限されています。`);
   }
 
-  // 6. 実行
-  // フォーカスを当ててからクリックすることで、確実にイベントを発動させる
   clickable.focus();
   clickable.click();
 
@@ -297,7 +278,6 @@ async function executeModelSwitch(targetModelName) {
   await sleep(1000);
 }
 
-// モデル切り替えを実行し、Proが制限されている場合は思考モードを試す
 async function smartModelSwitch(targetModelName) {
   try {
     await executeModelSwitch(targetModelName);
@@ -306,7 +286,6 @@ async function smartModelSwitch(targetModelName) {
       showToast('⚠️ Pro制限中のため、思考モードへの切り替えを試みます...');
       console.warn('Pro switch failed:', e.message);
       try {
-        // 再度メニューを開く判定を含めて実行
         await executeModelSwitch('思考モード');
       } catch (err) {
         console.error('思考モードへのフォールバックも失敗:', err);
@@ -324,7 +303,6 @@ async function smartModelSwitch(targetModelName) {
 
 // 1件のURLをインポートする処理
 async function importSingleUrl(targetString) {
-  // 新UIのクラスや属性を優先的に検索
   let plusBtn = document.querySelector('button.upload-card-button, button[aria-controls="upload-file-menu"], button[aria-label*="ファイルをアップロード"]');
 
   if (!plusBtn) {
@@ -357,13 +335,9 @@ async function importSingleUrl(targetString) {
   plusBtn.click();
   await sleep(600);
 
-  // 「コードをインポート」を検索
   const findImportCodeItem = () => {
-    // 新UIのdata-test-idを優先
     let item = document.querySelector('button[data-test-id="code-import-button"]');
     if (item) return item;
-
-    // フォールバック（テキストベース）
     return Array.from(document.querySelectorAll('div, span, li, button, a'))
       .find(el => el.innerText && (el.innerText.includes('コードをインポート') || el.innerText.includes('Import code')));
   };
@@ -372,8 +346,6 @@ async function importSingleUrl(targetString) {
   if (!importCodeItem) throw new Error('「コードをインポート」メニューが見つかりませんでした。');
 
   importCodeItem.click();
-
-  // Gemini本体がダイアログを表示し、入力欄をリセットし終わるまで待機する
   await sleep(800);
 
   const isWebUrl = /^https?:\/\//i.test(targetString.trim());
@@ -400,8 +372,7 @@ async function importSingleUrl(targetString) {
     urlInput.dispatchEvent(new Event('input', { bubbles: true }));
     urlInput.dispatchEvent(new Event('change', { bubbles: true }));
 
-    await sleep(400); // inputイベント反応待ち
-    // インポート実行ボタンを探す
+    await sleep(400);
     const findInsertBtn = () => {
       let btn = document.querySelector('button[data-test-id="import-repository-button"]');
       if (btn) return btn;
@@ -412,7 +383,7 @@ async function importSingleUrl(targetString) {
     const insertBtn = await waitForElement(() => findInsertBtn(), 5000);
     if (insertBtn) {
       insertBtn.click();
-      await sleep(2500); // 描画後のインポート処理待ち（ダイアログ遷移等が含まれるため）
+      await sleep(2500);
     } else throw new Error('「インポート」実行ボタンが見つかりませんでした。');
 
   } else {
@@ -423,7 +394,6 @@ async function importSingleUrl(targetString) {
       console.warn("Clipboard API failed", err);
       showToast(`⚠️ コピー失敗。手動でペーストしてください: ${targetString}`);
     }
-    // フォルダアップロードボタンを探す
     const findFolderBtn = () => {
       let btn = document.querySelector('button[data-test-id="upload-code-folder-button"]');
       if (btn) return btn;
@@ -439,7 +409,6 @@ async function importSingleUrl(targetString) {
       while (dialogExists && waitCount < 120) {
         await sleep(1000);
         const dialogs = document.querySelectorAll('dialog, [role="dialog"]');
-        // ダイアログが存在し続けるかどうかの判定（新旧のUI両対応）
         dialogExists = Array.from(dialogs).some(d => d.querySelector('input[data-test-id="repo-url-input"]') || d.querySelector('input[placeholder*="github.com"]'));
         waitCount++;
       }
@@ -519,6 +488,9 @@ async function renderRepoPanel() {
   if (!container) {
     container = document.createElement('div');
     container.id = 'gemini-auto-import-container';
+    // --- ここを追加 ---
+    // 親コンテナの位置基準を相対的にするため
+    container.style.position = 'fixed';
     document.body.appendChild(container);
   }
   container.innerHTML = '';
@@ -551,6 +523,14 @@ async function renderRepoPanel() {
   if (repos.length > 0) {
     const panel = document.createElement('div');
     panel.id = 'gemini-auto-import-panel';
+
+    // === 【修正】ボタンの位置を固定するため、リストを絶対配置にする ===
+    panel.style.position = 'absolute';
+    panel.style.bottom = 'calc(100% + 12px)'; // ボタン群のすぐ上に配置
+    panel.style.right = '0'; // 右端で揃える
+    panel.style.width = 'max-content';
+    panel.style.minWidth = '280px';
+    // ==========================================================
 
     // 折りたたみ状態の管理用フラグを初期化
     if (typeof window.geminiRepoListExpanded === 'undefined') {
@@ -665,13 +645,11 @@ async function renderRepoPanel() {
 }
 
 chrome.runtime.onMessage.addListener((request, sender) => {
-  // 送信元がこの拡張機能自身であることを確認（セキュリティ対策）
   if (sender.id === chrome.runtime.id && request.action === "REFRESH_LIST") {
     renderRepoPanel();
   }
 });
 
-// コンテナの死活監視：MutationObserverからsetIntervalによる軽量な定期チェックに変更
 setInterval(() => {
   if (!document.getElementById('gemini-auto-import-container')) {
     renderRepoPanel();
