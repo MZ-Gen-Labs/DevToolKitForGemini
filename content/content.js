@@ -551,20 +551,76 @@ async function renderRepoPanel() {
   if (repos.length > 0) {
     const panel = document.createElement('div');
     panel.id = 'gemini-auto-import-panel';
+
+    // 折りたたみ状態の管理用フラグを初期化
+    if (typeof window.geminiRepoListExpanded === 'undefined') {
+      window.geminiRepoListExpanded = false; // デフォルトは「折りたたむ」
+    }
+
+    // アイテムを格納するコンテナ
+    const listContainer = document.createElement('div');
+    listContainer.style.display = 'flex';
+    listContainer.style.flexDirection = 'column';
+    listContainer.style.gap = '8px';
+
+    let hasUnchecked = false;
+
     [...repos].sort((a, b) => (b.lastImported || 0) - (a.lastImported || 0)).forEach(repo => {
       const item = document.createElement('div');
       item.className = 'gemini-repo-item';
-      const checkbox = document.createElement('input'); checkbox.type = 'checkbox'; checkbox.checked = repo.checked;
+
+      // チェックされていないアイテムの処理
+      if (!repo.checked) {
+        hasUnchecked = true;
+        // 折りたたみ状態であれば非表示にする
+        if (!window.geminiRepoListExpanded) {
+          item.style.display = 'none';
+        }
+      }
+
+      const checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.checked = repo.checked;
       checkbox.addEventListener('change', async (e) => {
         const d = await chrome.storage.local.get(['repos']);
         let rs = d.repos || [];
         const t = rs.find(r => r.url === repo.url);
-        if (t) { t.checked = e.target.checked; await chrome.storage.local.set({ repos: rs }); }
+        if (t) {
+          t.checked = e.target.checked;
+          await chrome.storage.local.set({ repos: rs });
+          // チェックが変更されたらパネルを再描画して表示状態を即座に反映
+          renderRepoPanel();
+        }
       });
       const label = document.createElement('span');
       label.textContent = (/^https?:\/\//i.test(repo.url.trim()) ? '🌐 ' : '📁 ') + repo.url;
-      item.appendChild(checkbox); item.appendChild(label); panel.appendChild(item);
+      item.appendChild(checkbox);
+      item.appendChild(label);
+      listContainer.appendChild(item);
     });
+
+    panel.appendChild(listContainer);
+
+    // 未チェックのアイテムがある場合のみトグル（開閉）ボタンを表示
+    if (hasUnchecked) {
+      const toggleBtn = document.createElement('div');
+      toggleBtn.style.fontSize = '12px';
+      toggleBtn.style.color = '#0b57d0';
+      toggleBtn.style.cursor = 'pointer';
+      toggleBtn.style.textAlign = 'center';
+      toggleBtn.style.marginTop = '4px';
+      toggleBtn.style.paddingTop = '8px';
+      toggleBtn.style.borderTop = '1px solid #eee';
+      toggleBtn.textContent = window.geminiRepoListExpanded ? '▲ 折りたたむ' : '▼ すべて表示';
+
+      toggleBtn.addEventListener('click', (e) => {
+        e.stopPropagation(); // ドラッグ操作の誤爆を防ぐ
+        window.geminiRepoListExpanded = !window.geminiRepoListExpanded;
+        renderRepoPanel(); // 再描画して表示を切り替え
+      });
+      panel.appendChild(toggleBtn);
+    }
+
     container.appendChild(panel);
   }
 
