@@ -1,5 +1,7 @@
 # Dev Toolkit for Gemini
 
+[![GitHub Repository](https://img.shields.io/badge/GitHub-Repository-black?logo=github)](https://github.com/MZ-Gen-Labs/DevToolKitForGemini)
+
 GeminiのWebチャット画面（gemini.google.com）をパワーアップする、開発者向けのChrome拡張機能です。
 コードのインポート作業や、長文のスクロール、モデルの素早い切り替えをサポートします。
 
@@ -33,6 +35,11 @@ GeminiのWebチャット画面（gemini.google.com）をパワーアップする
    ブラウザ右上の拡張機能アイコンをクリックすると設定画面が開きます。スクロールバーのカスタマイズや、自動インポートしたいリポジトリのURL（またはパス）を追加・管理できます。
 2. **Gemini画面での操作**
    Gemini (`https://gemini.google.com/app`) にアクセスすると、画面右下に専用の操作パネルが表示されます。パネルから、モデル切り替え、登録したリポジトリの自動インポート、スクロール操作を実行できます。
+
+## 🔗 リンクとプライバシーポリシー
+
+* **ソースコード / GitHubリポジトリ:** [MZ-Gen-Labs/DevToolKitForGemini](https://github.com/MZ-Gen-Labs/DevToolKitForGemini)
+* **プライバシーポリシー:** [こちらをご参照ください](https://mz-gen-labs.github.io/DevToolKitForGemini/privacy.html)
 
 ## 📄 ライセンス
 
