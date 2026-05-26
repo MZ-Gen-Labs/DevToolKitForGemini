@@ -10,27 +10,31 @@ document.addEventListener('DOMContentLoaded', () => {
   const sbWidth = document.getElementById('sbWidth');
   const sbWidthValue = document.getElementById('sbWidthValue');
   const sbTransparent = document.getElementById('sbTransparent');
+  const modelSwitchEnabled = document.getElementById('modelSwitchEnabled'); // 🌟 追加
 
-  // 🌟 修正：設定の読み込みに panelVisible を追加
-  chrome.storage.local.get(['panelVisible', 'sbEnabled', 'sbWidth', 'sbTransparent'], (result) => {
+  // 🌟 修正：設定の読み込みに modelSwitchEnabled を追加
+  chrome.storage.local.get(['panelVisible', 'sbEnabled', 'sbWidth', 'sbTransparent', 'modelSwitchEnabled'], (result) => {
     panelVisible.checked = result.panelVisible !== false; // 初期値 true
     sbEnabled.checked = result.sbEnabled !== false; // 初期値 true
     sbWidth.value = result.sbWidth || 8;
     sbWidthValue.textContent = sbWidth.value;
     sbTransparent.checked = result.sbTransparent !== false; // 初期値 true
+    modelSwitchEnabled.checked = result.modelSwitchEnabled !== false; // 🌟 追加 (初期値 true)
   });
 
-  // 🌟 修正：設定の保存に panelVisible を追加
+  // 🌟 修正：設定の保存に modelSwitchEnabled を追加
   const saveDisplaySettings = () => {
     chrome.storage.local.set({
       panelVisible: panelVisible.checked,
       sbEnabled: sbEnabled.checked,
       sbWidth: parseInt(sbWidth.value, 10),
-      sbTransparent: sbTransparent.checked
+      sbTransparent: sbTransparent.checked,
+      modelSwitchEnabled: modelSwitchEnabled.checked // 🌟 追加
     });
   };
 
   // 🌟 修正：イベントリスナーの登録
+  modelSwitchEnabled.addEventListener('change', saveDisplaySettings);
   panelVisible.addEventListener('change', saveDisplaySettings);
   sbEnabled.addEventListener('change', saveDisplaySettings);
   sbWidth.addEventListener('input', () => {

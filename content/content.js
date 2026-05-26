@@ -68,8 +68,8 @@ chrome.storage.onChanged.addListener((changes, namespace) => {
         applyScrollbarStyle(result);
       });
     }
-    // 🌟 追加：ポップアップでパネルの表示/非表示が切り替えられたら即座に反映
-    if (changes.panelVisible) {
+    // 🌟 修正：モデル切り替え設定が変更された場合もパネルを再描画
+    if (changes.panelVisible || changes.modelSwitchEnabled) {
       renderRepoPanel();
     }
   }
@@ -469,7 +469,8 @@ if (!window.geminiDragInitialized) {
 // パネル描画機能 (最新モデル名への変更)
 // ==========================================
 async function renderRepoPanel() {
-  const data = await chrome.storage.local.get(['repos', 'widgetPosition', 'selectedModel', 'panelVisible']);
+  // 🌟 修正：modelSwitchEnabled も取得する
+  const data = await chrome.storage.local.get(['repos', 'widgetPosition', 'selectedModel', 'panelVisible', 'modelSwitchEnabled']);
   
   let container = document.getElementById('gemini-auto-import-container');
 
@@ -522,26 +523,34 @@ async function renderRepoPanel() {
   closeBtnContainer.appendChild(closeBtn);
   container.appendChild(closeBtnContainer);
 
+  // モデル選択UI
   const modelGroup = document.createElement('div');
   modelGroup.className = 'gemini-model-group';
-  const modelSelect = document.createElement('select');
-  modelSelect.id = 'gemini-model-select';
   
-  // 選択肢を最新のモデル名に変更
-  ['Flash-Lite', 'Flash', 'Pro'].forEach(m => {
-    const opt = document.createElement('option'); opt.value = m; opt.textContent = m;
-    if (m === (data.selectedModel || 'Flash')) opt.selected = true;
-    modelSelect.appendChild(opt);
-  });
-  
-  modelSelect.addEventListener('change', async (e) => await chrome.storage.local.set({ selectedModel: e.target.value }));
-  const modelApplyBtn = document.createElement('button');
-  modelApplyBtn.className = 'gemini-model-apply-btn'; modelApplyBtn.textContent = '切替';
-  modelApplyBtn.addEventListener('click', (e) => {
-    e.stopPropagation();
-    smartModelSwitch(modelSelect.value);
-  });
-  modelGroup.appendChild(modelSelect); modelGroup.appendChild(modelApplyBtn);
+  // 🌟 追加：設定がONの場合のみ、プルダウンと切替ボタンを生成する
+  if (data.modelSwitchEnabled !== false) {
+    const modelSelect = document.createElement('select');
+    modelSelect.id = 'gemini-model-select';
+    
+    ['Flash-Lite', 'Flash', 'Pro'].forEach(m => {
+      const opt = document.createElement('option'); opt.value = m; opt.textContent = m;
+      if (m === (data.selectedModel || 'Flash')) opt.selected = true;
+      modelSelect.appendChild(opt);
+    });
+    
+    modelSelect.addEventListener('change', async (e) => await chrome.storage.local.set({ selectedModel: e.target.value }));
+    const modelApplyBtn = document.createElement('button');
+    modelApplyBtn.className = 'gemini-model-apply-btn'; modelApplyBtn.textContent = '切替';
+    modelApplyBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      smartModelSwitch(modelSelect.value);
+    });
+    modelGroup.appendChild(modelSelect); 
+    modelGroup.appendChild(modelApplyBtn);
+  } else {
+    // 🌟 追加：OFFの場合は領域ごと隠す
+    modelGroup.style.display = 'none';
+  }
 
   let repos = data.repos || [];
   if (repos.length > 0) {
@@ -622,11 +631,20 @@ async function renderRepoPanel() {
   const bg = document.createElement('div'); bg.className = 'gemini-button-group';
   bg.appendChild(modelGroup);
   const ab = document.createElement('button'); ab.id = 'gemini-auto-import-btn'; ab.className = 'gemini-action-btn'; ab.type = 'button'; ab.textContent = '📥 自動インポート';
+  
   ab.addEventListener('click', async () => {
-    const currentData = await chrome.storage.local.get(['selectedModel']);
-    if (currentData.selectedModel) {
-      try { await smartModelSwitch(currentData.selectedModel); } catch (e) { }
+    // 🌟 修正：modelSwitchEnabled も取得
+    const currentData = await chrome.storage.local.get(['selectedModel', 'modelSwitchEnabled']);
+    
+    // 🌟 修正：設定がONの場合のみ切り替え処理を実行
+    if (currentData.modelSwitchEnabled !== false && currentData.selectedModel) {
+      try { 
+        await smartModelSwitch(currentData.selectedModel); 
+      } catch (e) {
+        console.warn("モデル切り替えスキップ:", e);
+      }
     }
+    // エラーが出ても出なくてもインポートを続行する
     runAutoImport();
   });
   bg.appendChild(ab);
