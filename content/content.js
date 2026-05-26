@@ -197,89 +197,64 @@ function scrollRelative(selector, direction) {
 }
 
 // ==========================================
-// モデル切り替え用ロジック (構造変更対応版)
+// モデル切り替え用ロジック (Gemini 3.1/3.5 最新UI対応版)
 // ==========================================
 async function executeModelSwitch(targetModelName) {
-  let modelBtn = document.querySelector('button[data-test-id="bard-mode-menu-button"]');
-
-  if (!modelBtn) {
-    const allBtns = Array.from(document.querySelectorAll('button, [role="button"]'));
-    modelBtn = allBtns.find(btn => {
-      const txt = btn.textContent;
-      return (txt.includes('Gemini') || txt.includes('Pro') || txt.includes('思考') || txt.includes('Flash')) &&
-        (btn.querySelector('mat-icon, svg, img') || btn.getAttribute('aria-haspopup') === 'true' || btn.classList.contains('input-area-switch'));
-    });
-  }
+  let modelBtn = null;
+  const buttons = Array.from(document.querySelectorAll('button, [role="button"], [role="combobox"]'));
+  
+  modelBtn = buttons.find(btn => {
+    const txt = (btn.textContent || '').trim();
+    return (txt.includes('Pro') || txt.includes('Flash') || txt.includes('Lite')) &&
+           (btn.getAttribute('aria-haspopup') === 'true' || btn.getAttribute('aria-expanded') !== null || btn.querySelector('svg'));
+  });
 
   if (!modelBtn) throw new Error('モデル選択ボタンが見つかりませんでした。');
 
-  const menuVisible = !!document.querySelector('div[role="menu"].gds-mode-switch-menu, [role="listbox"], .mat-menu-panel, .kb-menu');
-  if (!menuVisible) {
+  const isExpanded = modelBtn.getAttribute('aria-expanded') === 'true';
+  if (!isExpanded) {
     modelBtn.click();
     await sleep(800);
   }
 
-  const testIdMap = {
-    'Pro': ['bard-mode-option-pro', 'bard-mode-option-gemini-advanced'],
-    '思考モード': ['bard-mode-option-思考モード', 'bard-mode-option-thinking'],
-    '高速モード': ['bard-mode-option-高速モード', 'bard-mode-option-flash']
-  };
-
   const nameMap = {
-    'Pro': ['Pro', '1.5 Pro', 'Advanced'],
-    '思考モード': ['思考', 'Thinking', 'Flash-Thinking'],
-    '高速モード': ['Flash', '高速', '2.0 Flash']
+    'Pro': ['3.1 Pro', 'Pro'],
+    'Flash': ['3.5 Flash', 'Flash'],
+    'Flash-Lite': ['3.1 Flash-Lite', 'Flash-Lite']
   };
 
-  const targetTestIds = testIdMap[targetModelName] || [];
   const searchTerms = nameMap[targetModelName] || [targetModelName];
-
   let clickable = null;
 
-  for (const tid of targetTestIds) {
-    const el = document.querySelector(`[data-test-id="${tid}"]`);
-    if (el) {
-      clickable = el;
+  const potentialItems = Array.from(document.querySelectorAll('[role="menuitem"], [role="option"], li, div.menu-item, span.menu-item'));
+
+  for (const term of searchTerms) {
+    clickable = potentialItems.find(el => {
+      const rect = el.getBoundingClientRect();
+      return rect.width > 0 && (el.textContent || '').includes(term);
+    });
+    
+    if (clickable) {
+      clickable = clickable.closest('[role="menuitem"], [role="option"], button, li') || clickable;
       break;
     }
   }
 
   if (!clickable) {
-    const potentialItems = Array.from(document.querySelectorAll('div[role="menuitem"], [role="option"], button[mat-menu-item], span, div'));
-    let foundElement = null;
-    for (const term of searchTerms) {
-      foundElement = potentialItems.find(el => {
-        const rect = el.getBoundingClientRect();
-        return rect.width > 0 && el.textContent.trim().includes(term);
-      });
-      if (foundElement) break;
-    }
-
-    if (foundElement) {
-      clickable = foundElement.closest('[role="menuitem"]') ||
-        foundElement.closest('[role="option"]') ||
-        foundElement.closest('button') ||
-        foundElement;
-    }
-  }
-
-  if (!clickable) {
+    document.body.click(); 
     throw new Error(`${targetModelName} をメニュー内で特定できませんでした。`);
   }
 
   const isDisabledAttr = clickable.disabled === true || clickable.getAttribute('disabled') === 'true';
   const isAriaDisabled = clickable.getAttribute('aria-disabled') === 'true';
-  const hasDisabledClass = clickable.classList.contains('disabled') || clickable.innerText.includes('上限');
-  const style = window.getComputedStyle(clickable);
+  const hasDisabledClass = clickable.classList.contains('disabled');
 
-  if (isDisabledAttr || isAriaDisabled || hasDisabledClass || style.pointerEvents === 'none') {
+  if (isDisabledAttr || isAriaDisabled || hasDisabledClass) {
     document.body.click();
     throw new Error(`${targetModelName} は現在制限されています。`);
   }
 
-  clickable.focus();
   clickable.click();
-
   showToast(`🤖 モデルを ${targetModelName} に切り替えました`);
   await sleep(1000);
 }
@@ -289,14 +264,12 @@ async function smartModelSwitch(targetModelName) {
     await executeModelSwitch(targetModelName);
   } catch (e) {
     if (targetModelName === 'Pro') {
-      showToast('⚠️ Pro制限中のため、思考モードへの切り替えを試みます...');
-      console.warn('Pro switch failed:', e.message);
+      showToast('⚠️ Pro制限中のため、Flashへの切り替えを試みます...');
       try {
-        await executeModelSwitch('思考モード');
+        await executeModelSwitch('Flash');
       } catch (err) {
-        console.error('思考モードへのフォールバックも失敗:', err);
         try {
-          await executeModelSwitch('高速モード');
+          await executeModelSwitch('Flash-Lite');
         } catch (f) {
           showToast('❌ 全てのモデル切り替えに失敗しました。');
         }
@@ -307,61 +280,45 @@ async function smartModelSwitch(targetModelName) {
   }
 }
 
-// 1件のURLをインポートする処理
+// ==========================================
+// インポート機能 (誤爆防止・最新UI対応版)
+// ==========================================
 async function importSingleUrl(targetString) {
-  // 🌟 修正1: [+] メニューボタンを探す部分の強化
-  let plusBtn = document.querySelector(
-    'button.upload-card-button, ' +
-    'button[aria-controls="upload-file-menu"], ' +
-    'button[aria-label*="ファイルをアップロード"], ' +
-    'button[aria-label*="アップロード"], ' +
-    'button[data-test-id="upload-button-new-id"], ' +
-    '[mattooltip*="アップロード"]' // 新しいUIの可能性を考慮
-  );
-
-  if (!plusBtn) {
-    const textarea = document.querySelector('textarea, rich-textarea, div[contenteditable="true"]');
-    if (textarea) {
-      let container = textarea.parentElement;
-      while (container && container.tagName !== 'BODY') {
-        const allBtns = Array.from(container.querySelectorAll('button, div[role="button"]'));
-        plusBtn = allBtns.find(btn => {
-          const label = (btn.getAttribute('aria-label') || '').toLowerCase();
-          const tooltip = (btn.getAttribute('mattooltip') || '').toLowerCase();
-          const isMatch = (label.includes('追加') || label.includes('add') || label.includes('ツール') || label.includes('アップロード') || tooltip.includes('アップロード'));
-          const isExclude = (label.includes('削除') || label.includes('remove') || label.includes('モデル') || label.includes('model') || label.includes('gemini'));
-          return isMatch && !isExclude;
-        });
-        if (plusBtn) break;
-        container = container.parentElement;
-      }
-    }
+  let plusBtn = null;
+  // テキスト入力エリア周辺に限定してボタンを探す
+  const inputArea = document.querySelector('rich-textarea, textarea, div[contenteditable="true"]')?.closest('div[class*="input"], form, div[class*="chat"]');
+  
+  if (inputArea) {
+    const btns = Array.from(inputArea.querySelectorAll('button, div[role="button"]'));
+    plusBtn = btns.find(btn => {
+      const label = (btn.getAttribute('aria-label') || btn.getAttribute('mattooltip') || '').toLowerCase();
+      const isMatch = label.includes('追加') || label.includes('アップロード') || label.includes('添付') || label.includes('upload') || label.includes('attach');
+      const isExclude = label.includes('画像') || label.includes('image') || label.includes('マイク') || label.includes('mic');
+      return isMatch && !isExclude;
+    });
   }
 
   if (!plusBtn) {
-    const fallbackBtns = Array.from(document.querySelectorAll('button[aria-label*="追加"], button[aria-label*="Add"], button[aria-haspopup="true"]'));
-    plusBtn = fallbackBtns.find(btn => {
-      const label = (btn.getAttribute('aria-label') || '').toLowerCase();
-      return !label.includes('モデル') && !label.includes('gemini') && !label.includes('削除');
-    });
+    plusBtn = document.querySelector('button[aria-label*="ファイルをアップロード"], button[aria-label*="Upload"], button[mattooltip*="アップロード"]');
   }
 
   if (!plusBtn) throw new Error('[+] メニューボタンが見つかりませんでした。');
   plusBtn.click();
   await sleep(600);
 
-  // 🌟 修正2: 「コードをインポート」メニューを探す部分の強化
   const findImportCodeItem = () => {
-    let item = document.querySelector('button[data-test-id="code-import-button"]');
-    if (item) return item;
-    
-    // クラス名や要素が変わった場合に対応
-    return Array.from(document.querySelectorAll('div, span, li, button, a, mat-list-item'))
-      .find(el => el.innerText && (el.innerText.includes('コードをインポート') || el.innerText.includes('Import code') || el.innerText.includes('フォルダをアップロード')));
+    return Array.from(document.querySelectorAll('div, span, li, button, a, mat-list-item, menuitem, [role="menuitem"]'))
+      .find(el => {
+         const text = el.innerText || '';
+         return text.includes('コードをインポート') || text.includes('GitHub') || text.includes('Import code') || text.includes('フォルダをアップロード') || text.includes('フォルダ');
+      });
   };
 
   const importCodeItem = await waitForElement(() => findImportCodeItem(), 5000);
-  if (!importCodeItem) throw new Error('「コードをインポート」メニューが見つかりませんでした。');
+  if (!importCodeItem) {
+    document.body.click(); 
+    throw new Error('「インポート / アップロード」メニューが見つかりませんでした。');
+  }
 
   importCodeItem.click();
   await sleep(800);
@@ -370,13 +327,11 @@ async function importSingleUrl(targetString) {
 
   if (isWebUrl) {
     const findUrlInput = () => {
-      let input = document.querySelector('input[data-test-id="repo-url-input"]');
-      if (input) return input;
-      input = document.querySelector('input[placeholder*="github.com"]');
+      let input = document.querySelector('input[data-test-id="repo-url-input"], input[placeholder*="github.com"], input[aria-label*="URL"]');
       if (input) return input;
       const dialogs = document.querySelectorAll('dialog, [role="dialog"]');
       if (dialogs.length > 0) {
-        return dialogs[dialogs.length - 1].querySelector('input[type="text"]');
+         return dialogs[dialogs.length - 1].querySelector('input[type="text"], input[type="url"]');
       }
       return null;
     };
@@ -391,18 +346,22 @@ async function importSingleUrl(targetString) {
     urlInput.dispatchEvent(new Event('change', { bubbles: true }));
 
     await sleep(400);
+    
     const findInsertBtn = () => {
-      let btn = document.querySelector('button[data-test-id="import-repository-button"]');
-      if (btn) return btn;
       return Array.from(document.querySelectorAll('button, div[role="button"]'))
-        .find(el => el.innerText && (el.innerText === 'インポート' || el.innerText === 'Import'));
+        .find(el => {
+           const txt = (el.innerText || '').trim();
+           return txt === 'インポート' || txt === 'Import' || txt === '追加' || txt === 'Add';
+        });
     };
 
     const insertBtn = await waitForElement(() => findInsertBtn(), 5000);
     if (insertBtn) {
       insertBtn.click();
       await sleep(2500);
-    } else throw new Error('「インポート」実行ボタンが見つかりませんでした。');
+    } else {
+      throw new Error('「インポート」実行ボタンが見つかりませんでした。');
+    }
 
   } else {
     try {
@@ -416,7 +375,10 @@ async function importSingleUrl(targetString) {
       let btn = document.querySelector('button[data-test-id="upload-code-folder-button"]');
       if (btn) return btn;
       return Array.from(document.querySelectorAll('div, span, button, a, label, p'))
-        .find(el => el.innerText && (el.innerText.includes('フォルダをアップロード') || el.innerText.includes('Upload folder')));
+        .find(el => {
+            const txt = el.innerText || '';
+            return txt.includes('フォルダをアップロード') || txt.includes('Upload folder');
+        });
     };
 
     const folderBtnElement = await waitForElement(() => findFolderBtn(), 5000);
@@ -431,7 +393,9 @@ async function importSingleUrl(targetString) {
         waitCount++;
       }
       await sleep(1500);
-    } else throw new Error('「フォルダをアップロード」ボタンが見つかりませんでした。');
+    } else {
+      throw new Error('「フォルダをアップロード」ボタンが見つかりませんでした。');
+    }
   }
 }
 
@@ -501,12 +465,14 @@ if (!window.geminiDragInitialized) {
   }, { passive: true });
 }
 
+// ==========================================
+// パネル描画機能 (最新モデル名への変更)
+// ==========================================
 async function renderRepoPanel() {
   const data = await chrome.storage.local.get(['repos', 'widgetPosition', 'selectedModel', 'panelVisible']);
   
   let container = document.getElementById('gemini-auto-import-container');
 
-  // 🌟 追加：パネル非表示設定の場合は要素を削除して終了
   if (data.panelVisible === false) {
     if (container) container.remove();
     return;
@@ -525,7 +491,6 @@ async function renderRepoPanel() {
     container.style.left = data.widgetPosition.left; container.style.top = data.widgetPosition.top;
   }
 
-  // 🌟 追加：「閉じる（✖）」ボタンの設置
   const closeBtnContainer = document.createElement('div');
   closeBtnContainer.style.display = 'flex';
   closeBtnContainer.style.justifyContent = 'flex-end';
@@ -551,23 +516,24 @@ async function renderRepoPanel() {
   
   closeBtn.addEventListener('click', async (e) => {
     e.stopPropagation();
-    // 閉じるボタンが押されたら状態をfalseにして保存（自動的に再描画されて消えます）
     await chrome.storage.local.set({ panelVisible: false });
   });
   
   closeBtnContainer.appendChild(closeBtn);
   container.appendChild(closeBtnContainer);
 
-  // モデル選択UI
   const modelGroup = document.createElement('div');
   modelGroup.className = 'gemini-model-group';
   const modelSelect = document.createElement('select');
   modelSelect.id = 'gemini-model-select';
-  ['高速モード', '思考モード', 'Pro'].forEach(m => {
+  
+  // 選択肢を最新のモデル名に変更
+  ['Flash-Lite', 'Flash', 'Pro'].forEach(m => {
     const opt = document.createElement('option'); opt.value = m; opt.textContent = m;
-    if (m === (data.selectedModel || '思考モード')) opt.selected = true;
+    if (m === (data.selectedModel || 'Flash')) opt.selected = true;
     modelSelect.appendChild(opt);
   });
+  
   modelSelect.addEventListener('change', async (e) => await chrome.storage.local.set({ selectedModel: e.target.value }));
   const modelApplyBtn = document.createElement('button');
   modelApplyBtn.className = 'gemini-model-apply-btn'; modelApplyBtn.textContent = '切替';
@@ -581,21 +547,16 @@ async function renderRepoPanel() {
   if (repos.length > 0) {
     const panel = document.createElement('div');
     panel.id = 'gemini-auto-import-panel';
-
-    // === 【修正】ボタンの位置を固定するため、リストを絶対配置にする ===
     panel.style.position = 'absolute';
-    panel.style.bottom = 'calc(100% + 12px)'; // ボタン群のすぐ上に配置
-    panel.style.right = '0'; // 右端で揃える
+    panel.style.bottom = 'calc(100% + 12px)'; 
+    panel.style.right = '0'; 
     panel.style.width = 'max-content';
     panel.style.minWidth = '280px';
-    // ==========================================================
 
-    // 折りたたみ状態の管理用フラグを初期化
     if (typeof window.geminiRepoListExpanded === 'undefined') {
-      window.geminiRepoListExpanded = false; // デフォルトは「折りたたむ」
+      window.geminiRepoListExpanded = false; 
     }
 
-    // アイテムを格納するコンテナ
     const listContainer = document.createElement('div');
     listContainer.style.display = 'flex';
     listContainer.style.flexDirection = 'column';
@@ -607,10 +568,8 @@ async function renderRepoPanel() {
       const item = document.createElement('div');
       item.className = 'gemini-repo-item';
 
-      // チェックされていないアイテムの処理
       if (!repo.checked) {
         hasUnchecked = true;
-        // 折りたたみ状態であれば非表示にする
         if (!window.geminiRepoListExpanded) {
           item.style.display = 'none';
         }
@@ -626,7 +585,6 @@ async function renderRepoPanel() {
         if (t) {
           t.checked = e.target.checked;
           await chrome.storage.local.set({ repos: rs });
-          // チェックが変更されたらパネルを再描画して表示状態を即座に反映
           renderRepoPanel();
         }
       });
@@ -639,7 +597,6 @@ async function renderRepoPanel() {
 
     panel.appendChild(listContainer);
 
-    // 未チェックのアイテムがある場合のみトグル（開閉）ボタンを表示
     if (hasUnchecked) {
       const toggleBtn = document.createElement('div');
       toggleBtn.style.fontSize = '12px';
@@ -652,9 +609,9 @@ async function renderRepoPanel() {
       toggleBtn.textContent = window.geminiRepoListExpanded ? '▲ 折りたたむ' : '▼ すべて表示';
 
       toggleBtn.addEventListener('click', (e) => {
-        e.stopPropagation(); // ドラッグ操作の誤爆を防ぐ
+        e.stopPropagation(); 
         window.geminiRepoListExpanded = !window.geminiRepoListExpanded;
-        renderRepoPanel(); // 再描画して表示を切り替え
+        renderRepoPanel(); 
       });
       panel.appendChild(toggleBtn);
     }
@@ -681,7 +638,6 @@ async function renderRepoPanel() {
   sg.appendChild(csb('⏫', 'トップ', 'top')); sg.appendChild(csb('🔼', '上', 'up')); sg.appendChild(csb('🔽', '下', 'down')); sg.appendChild(csb('⏬', 'ラスト', 'bottom'));
   bg.appendChild(sg);
 
-  // ジャンプコントローラー (新規: 前/次の質問、前/次のコード)
   const jg = document.createElement('div'); jg.className = 'gemini-scroll-group';
   const cjb = (t, ti, selector, dir) => {
     const b = document.createElement('button'); b.className = 'gemini-scroll-btn'; b.type = 'button'; b.textContent = t; b.title = ti; b.addEventListener('click', (e) => { e.stopPropagation(); e.preventDefault(); scrollRelative(selector, dir); }); return b;
