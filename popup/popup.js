@@ -4,35 +4,40 @@ document.addEventListener('DOMContentLoaded', () => {
   const statusEl = document.getElementById('status');
   const repoListEl = document.getElementById('repoList');
 
-  // スクロールバー設定要素
+  // 🌟 修正：パネル表示設定要素を追加
+  const panelVisible = document.getElementById('panelVisible');
   const sbEnabled = document.getElementById('sbEnabled');
   const sbWidth = document.getElementById('sbWidth');
   const sbWidthValue = document.getElementById('sbWidthValue');
   const sbTransparent = document.getElementById('sbTransparent');
 
-  // 設定の読み込み
-  chrome.storage.local.get(['sbEnabled', 'sbWidth', 'sbTransparent'], (result) => {
+  // 🌟 修正：設定の読み込みに panelVisible を追加
+  chrome.storage.local.get(['panelVisible', 'sbEnabled', 'sbWidth', 'sbTransparent'], (result) => {
+    panelVisible.checked = result.panelVisible !== false; // 初期値 true
     sbEnabled.checked = result.sbEnabled !== false; // 初期値 true
     sbWidth.value = result.sbWidth || 8;
     sbWidthValue.textContent = sbWidth.value;
     sbTransparent.checked = result.sbTransparent !== false; // 初期値 true
   });
 
-  // 設定の保存
-  const saveScrollSettings = () => {
+  // 🌟 修正：設定の保存に panelVisible を追加
+  const saveDisplaySettings = () => {
     chrome.storage.local.set({
+      panelVisible: panelVisible.checked,
       sbEnabled: sbEnabled.checked,
       sbWidth: parseInt(sbWidth.value, 10),
       sbTransparent: sbTransparent.checked
     });
   };
 
-  sbEnabled.addEventListener('change', saveScrollSettings);
+  // 🌟 修正：イベントリスナーの登録
+  panelVisible.addEventListener('change', saveDisplaySettings);
+  sbEnabled.addEventListener('change', saveDisplaySettings);
   sbWidth.addEventListener('input', () => {
     sbWidthValue.textContent = sbWidth.value;
-    saveScrollSettings();
+    saveDisplaySettings();
   });
-  sbTransparent.addEventListener('change', saveScrollSettings);
+  sbTransparent.addEventListener('change', saveDisplaySettings);
 
   // データ構造: repos = [{ url: '...', checked: true, lastImported: timestamp }]
 

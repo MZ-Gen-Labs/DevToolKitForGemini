@@ -62,10 +62,16 @@ chrome.storage.local.get(['sbEnabled', 'sbWidth', 'sbTransparent'], (result) => 
 });
 
 chrome.storage.onChanged.addListener((changes, namespace) => {
-  if (namespace === 'local' && (changes.sbEnabled || changes.sbWidth || changes.sbTransparent)) {
-    chrome.storage.local.get(['sbEnabled', 'sbWidth', 'sbTransparent'], (result) => {
-      applyScrollbarStyle(result);
-    });
+  if (namespace === 'local') {
+    if (changes.sbEnabled || changes.sbWidth || changes.sbTransparent) {
+      chrome.storage.local.get(['sbEnabled', 'sbWidth', 'sbTransparent'], (result) => {
+        applyScrollbarStyle(result);
+      });
+    }
+    // 🌟 追加：ポップアップでパネルの表示/非表示が切り替えられたら即座に反映
+    if (changes.panelVisible) {
+      renderRepoPanel();
+    }
   }
 });
 // utility: 指定したミリ秒待機する
@@ -303,7 +309,15 @@ async function smartModelSwitch(targetModelName) {
 
 // 1件のURLをインポートする処理
 async function importSingleUrl(targetString) {
-  let plusBtn = document.querySelector('button.upload-card-button, button[aria-controls="upload-file-menu"], button[aria-label*="ファイルをアップロード"]');
+  // 🌟 修正1: [+] メニューボタンを探す部分の強化
+  let plusBtn = document.querySelector(
+    'button.upload-card-button, ' +
+    'button[aria-controls="upload-file-menu"], ' +
+    'button[aria-label*="ファイルをアップロード"], ' +
+    'button[aria-label*="アップロード"], ' +
+    'button[data-test-id="upload-button-new-id"], ' +
+    '[mattooltip*="アップロード"]' // 新しいUIの可能性を考慮
+  );
 
   if (!plusBtn) {
     const textarea = document.querySelector('textarea, rich-textarea, div[contenteditable="true"]');
@@ -313,7 +327,8 @@ async function importSingleUrl(targetString) {
         const allBtns = Array.from(container.querySelectorAll('button, div[role="button"]'));
         plusBtn = allBtns.find(btn => {
           const label = (btn.getAttribute('aria-label') || '').toLowerCase();
-          const isMatch = (label.includes('追加') || label.includes('add') || label.includes('ツール') || label.includes('アップロード'));
+          const tooltip = (btn.getAttribute('mattooltip') || '').toLowerCase();
+          const isMatch = (label.includes('追加') || label.includes('add') || label.includes('ツール') || label.includes('アップロード') || tooltip.includes('アップロード'));
           const isExclude = (label.includes('削除') || label.includes('remove') || label.includes('モデル') || label.includes('model') || label.includes('gemini'));
           return isMatch && !isExclude;
         });
@@ -335,11 +350,14 @@ async function importSingleUrl(targetString) {
   plusBtn.click();
   await sleep(600);
 
+  // 🌟 修正2: 「コードをインポート」メニューを探す部分の強化
   const findImportCodeItem = () => {
     let item = document.querySelector('button[data-test-id="code-import-button"]');
     if (item) return item;
-    return Array.from(document.querySelectorAll('div, span, li, button, a'))
-      .find(el => el.innerText && (el.innerText.includes('コードをインポート') || el.innerText.includes('Import code')));
+    
+    // クラス名や要素が変わった場合に対応
+    return Array.from(document.querySelectorAll('div, span, li, button, a, mat-list-item'))
+      .find(el => el.innerText && (el.innerText.includes('コードをインポート') || el.innerText.includes('Import code') || el.innerText.includes('フォルダをアップロード')));
   };
 
   const importCodeItem = await waitForElement(() => findImportCodeItem(), 5000);
@@ -484,21 +502,61 @@ if (!window.geminiDragInitialized) {
 }
 
 async function renderRepoPanel() {
+  const data = await chrome.storage.local.get(['repos', 'widgetPosition', 'selectedModel', 'panelVisible']);
+  
   let container = document.getElementById('gemini-auto-import-container');
+
+  // 🌟 追加：パネル非表示設定の場合は要素を削除して終了
+  if (data.panelVisible === false) {
+    if (container) container.remove();
+    return;
+  }
+
   if (!container) {
     container = document.createElement('div');
     container.id = 'gemini-auto-import-container';
-    // --- ここを追加 ---
-    // 親コンテナの位置基準を相対的にするため
     container.style.position = 'fixed';
     document.body.appendChild(container);
   }
   container.innerHTML = '';
-  const data = await chrome.storage.local.get(['repos', 'widgetPosition', 'selectedModel']);
+  
   if (data.widgetPosition) {
     container.style.bottom = 'auto'; container.style.right = 'auto';
     container.style.left = data.widgetPosition.left; container.style.top = data.widgetPosition.top;
   }
+
+  // 🌟 追加：「閉じる（✖）」ボタンの設置
+  const closeBtnContainer = document.createElement('div');
+  closeBtnContainer.style.display = 'flex';
+  closeBtnContainer.style.justifyContent = 'flex-end';
+  closeBtnContainer.style.width = '100%';
+  
+  const closeBtn = document.createElement('button');
+  closeBtn.innerHTML = '✖';
+  closeBtn.title = 'パネルを閉じる（拡張機能メニューから再表示可能）';
+  closeBtn.style.background = 'rgba(255, 255, 255, 0.9)';
+  closeBtn.style.border = '1px solid #ddd';
+  closeBtn.style.borderRadius = '50%';
+  closeBtn.style.width = '24px';
+  closeBtn.style.height = '24px';
+  closeBtn.style.cursor = 'pointer';
+  closeBtn.style.fontSize = '12px';
+  closeBtn.style.color = '#555';
+  closeBtn.style.display = 'flex';
+  closeBtn.style.alignItems = 'center';
+  closeBtn.style.justifyContent = 'center';
+  closeBtn.style.boxShadow = '0 2px 4px rgba(0,0,0,0.1)';
+  closeBtn.style.marginBottom = '4px';
+  closeBtn.style.zIndex = '10001';
+  
+  closeBtn.addEventListener('click', async (e) => {
+    e.stopPropagation();
+    // 閉じるボタンが押されたら状態をfalseにして保存（自動的に再描画されて消えます）
+    await chrome.storage.local.set({ panelVisible: false });
+  });
+  
+  closeBtnContainer.appendChild(closeBtn);
+  container.appendChild(closeBtnContainer);
 
   // モデル選択UI
   const modelGroup = document.createElement('div');
